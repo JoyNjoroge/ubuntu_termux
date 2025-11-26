@@ -3,57 +3,53 @@
 set -e
 
 # --- CONFIG ---
-UBUNTU_DIR="/data/local/ubuntu"
+UBUNTU_DIR="$HOME/ubuntu"
 ROOTFS_URL="https://partner-images.canonical.com/core/jammy/current/ubuntu-jammy-core-cloudimg-arm64-root.tar.gz"
-ENTER_SCRIPT="/data/local/bin/enter-ubuntu"
+ENTER_SCRIPT="$HOME/enter-ubuntu.sh"
 
-echo "[+] Checking for root..."
-if [ "$(id -u)" != "0" ]; then
-    echo "[-] You MUST run Termux as root: 'tsu' or 'su'"
-    exit 1
-fi
-
-echo "[+] Installing dependencies..."
+echo "[+] Installing Termux dependencies..."
+pkg update -y
 pkg install -y proot tar curl
 
 echo "[+] Creating Ubuntu directory..."
-mkdir -p $UBUNTU_DIR
-cd $UBUNTU_DIR
+mkdir -p "$UBUNTU_DIR"
+cd "$UBUNTU_DIR"
 
 echo "[+] Downloading Ubuntu 22.04 (jammy) rootfs..."
-curl -L $ROOTFS_URL -o ubuntu.tar.gz
+curl -L "$ROOTFS_URL" -o ubuntu.tar.gz
 
 echo "[+] Extracting rootfs safely..."
 tar --no-same-owner --no-same-permissions --numeric-owner -xzf ubuntu.tar.gz
 rm ubuntu.tar.gz
 
 echo "[+] Creating necessary mount points..."
-mkdir -p $UBUNTU_DIR/{dev,proc,sys,run}
+mkdir -p "$UBUNTU_DIR"{/dev,/proc,/sys,/run}
 
 echo "[+] Creating chroot launch script..."
-mkdir -p /data/local/bin
-cat > $ENTER_SCRIPT <<EOF
+cat > "$ENTER_SCRIPT" <<'EOF'
 #!/system/bin/sh
-UBUNTU_DIR="$UBUNTU_DIR"
+UBUNTU_DIR="$HOME/ubuntu"
 
-mount -t proc /proc "\$UBUNTU_DIR/proc"
-mount --rbind /dev "\$UBUNTU_DIR/dev"
-mount --rbind /sys "\$UBUNTU_DIR/sys"
-mount --rbind /run "\$UBUNTU_DIR/run"
+# Mount necessary filesystems as root
+su -c "mount -t proc /proc \$UBUNTU_DIR/proc"
+su -c "mount --rbind /dev \$UBUNTU_DIR/dev"
+su -c "mount --rbind /sys \$UBUNTU_DIR/sys"
+su -c "mount --rbind /run \$UBUNTU_DIR/run"
 
 HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
-chroot "\$UBUNTU_DIR" /bin/bash
+chroot "$UBUNTU_DIR" /bin/bash
 
-umount "\$UBUNTU_DIR/proc"
-umount -l "\$UBUNTU_DIR/dev"
-umount -l "\$UBUNTU_DIR/sys"
-umount -l "\$UBUNTU_DIR/run"
+# Unmount when exiting
+su -c "umount \$UBUNTU_DIR/proc"
+su -c "umount -l \$UBUNTU_DIR/dev"
+su -c "umount -l \$UBUNTU_DIR/sys"
+su -c "umount -l \$UBUNTU_DIR/run"
 EOF
 
-chmod +x $ENTER_SCRIPT
+chmod +x "$ENTER_SCRIPT"
 
 echo "[+] Installing Python 3.10 inside Ubuntu..."
-$ENTER_SCRIPT <<'EOF'
+"$ENTER_SCRIPT" <<'EOF'
 apt update
 apt install -y python3.10 python3.10-venv python3.10-dev python3-pip
 EOF
@@ -65,10 +61,9 @@ echo "[✓] Python 3.10 installed!"
 echo "-----------------------------------------------------"
 echo "To enter Ubuntu at any time, run:"
 echo ""
-echo "     su"
-echo "     enter-ubuntu"
+echo "     ./enter-ubuntu.sh"
 echo ""
 echo "====================================================="
-echo ""
+
 echo "P.S. Antonio, You owe me"
 echo "Because i fucked cpython for you! 😆"
